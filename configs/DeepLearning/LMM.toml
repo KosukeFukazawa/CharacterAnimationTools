@@ -1,0 +1,84 @@
+# Common settings
+exp_name = "original"
+
+# device settings
+device = "cuda"
+gpus = [0]
+
+# which model do you train? ["all", "decompressor", "stepper", "projector"]
+train_model = "all"
+
+# if you need preprocess (if false, load from processed_dir)
+need_preprocess = true
+# processed data dir
+processed_dir = "model/LMM/preprocessed"
+
+# saved files settings
+checkpoint_dir = "model/LMM/checkpoints"
+save_config_dir = "model/LMM/configs"
+
+# random seed
+seed = 0
+
+# Dataset settings
+[dataset]
+  # dataset dir
+  dir = "data/lafan1"
+  files = ["pushAndStumble1_subject5.bvh", "run1_subject5.bvh", "walk1_subject5.bvh"]
+  starts = [194, 90, 80]
+  ends = [351, 7086, 7791]
+  ignore_end = 20
+  # matching features weights. (for decompressor)
+  # TBD: Specify feature that is used.
+  # [w_pos_foot, w_vel_foot, w_vel_hips, w_traj_pos, w_traj_dir]
+  feat_weights = [0.75, 1.0, 1.0, 1.0, 1.5]
+  [dataset.train]
+  [dataset.val]
+  [dataset.test]
+
+# Model settings
+[decompressor]
+  model = "mlp"
+  [decompressor.train]
+    max_iter = 300000
+    log_freq = 100
+    save_freq = 50000
+
+    num_epochs = 10
+    batch_size = 32
+    [decompressor.train.loss]
+      losses = ["mse"]
+      weights = [1.0]
+    [decompressor.train.optim]
+      method = "radam"
+      lr = 0.001
+      momentum = 0.9
+      betas = [0.5, 0.999]
+
+[stepper]
+  model = "mlp"
+  [stepper.train]
+    max_iter = 300000
+    log_freq = 100
+    save_freq = 50000
+    [stepper.train.loss]
+      losses = ["mse"]
+      weights = [1.0]
+    [stepper.train.optim]
+      method = "radam"
+      lr = 0.00003
+      betas = [0.5, 0.999]
+
+[projector]
+  model = "mlp"
+  [projector.train]
+    max_iter = 300000
+    log_freq = 100
+    save_freq = 50000
+    [projector.train.loss]
+      losses = ["mse"]
+      weights = [1.0]
+    [projector.train.optim]
+      method = "radam"
+      lr = 0.00003
+      betas = [0.5, 0.999]
