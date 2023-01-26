@@ -8,6 +8,7 @@ animation.py
 from __future__ import annotations
 
 import numpy as np
+import scipy.ndimage as ndimage
 from util import quat
 from anim.skel import Skel
 
@@ -18,7 +19,8 @@ class Animation:
         skel: Skel,
         quats: np.ndarray,
         trans: np.ndarray,
-        fps: int,
+        positions: np.ndarray = None,
+        fps: int=30,
         anim_name: str="animation",
     ) -> None:
         """ Class for Motions representations.
@@ -27,12 +29,14 @@ class Animation:
             skel (Skel): Skelton definition.
             quats (np.ndarray): Joints rotations. shape: (T, J, 4)
             trans (np.ndarray): Root transitions. shape: (T, 3)
-            fps (int): Frame per seconds for animation.
+            positions (np.ndarray): Joints positions. shape: (T, J, 3). Defaults to None.
+            fps (int): Frame per seconds for animation. Defaults to 30.
             anim_name (str, optional): Name of animation. Defaults to "animation".
         """
         self.skel = skel
         self.quats = quats
         self.trans = trans
+        self.positions = positions
         self.fps = fps
         self.name = anim_name
     
@@ -176,6 +180,9 @@ class Animation:
     # ==================
     #  Position from FK
     # ==================
+    def set_positions_from_fk(self) -> None:
+        self.positions = self.gpos
+    
     @property
     def lpos(self) -> np.ndarray:
         lpos: np.ndarray = self.offsets[None].repeat(len(self), axis=0)
@@ -296,48 +303,59 @@ class Animation:
     # =============
     #  trajectory 
     # =============
-    def proj_root_pos(self, remove_y: bool=False) -> np.ndarray:
-        """Root position projected on the ground (XZ plane) (world space).
+    def proj_root_pos(self, remove_vertical: bool=False) -> np.ndarray:
+        """Root position projected on the ground (world space).
         return:
-            Projected bone positons as ndarray of shape [len(self), 3] or [len(self), 2](remove_y).
+            Projected bone positons as ndarray of shape [len(self), 3] or [len(self), 2](remove_vertical).
         """
-        if remove_y:
-            return self.trans[..., [0,2]]
+        vertical = self.skel.vertical
+        if remove_vertical:
+            settle_ax = []
+            for i, ax in enumerate(vertical):
+                if ax == 0:
+                    settle_ax.append(i)
+            return self.trans[..., settle_ax]
         else:
-            return self.trans * np.array([1, 0, 1])
+            return self.trans * np.array([abs(abs(ax) - 1) for ax in vertical])
     
     @property
     def proj_root_rot(self) -> np.ndarray:
-        # root rotations relative to forward([0, 0, 1]) on XZ plane. [len(self), 4]
+        # root rotations relative to the forward on the ground. [len(self), 4]
+        forward = self.skel.forward
         return quat.normalize(
-            quat.between(np.array([0, 0, 1]), self.root_direction())
+            quat.between(np.array(forward), self.root_direction())
         )
     
-    def root_direction(self, remove_y: bool=False) -> np.ndarray:
-        """Forward orientation vectors on XZ plane (world space).
+    def root_direction(self, remove_vertical: bool=False) -> np.ndarray:
+        """Forward orientation vectors on the ground (world space).
         return:
-            Forward vectors as ndarray of shape [..., 3] or [..., 2](remove_y).
+            Forward vectors as ndarray of shape [..., 3] or [..., 2](remove_vertical).
         """
-        # Calculate forward vectors except y axis.
+        # Calculate forward vectors except vertical axis.
+        vertical = self.skel.vertical
         rt_rots = self.quats[..., 0, :]
         forwards = np.zeros(shape=rt_rots.shape[:-1] + (3,))
         forwards[...,] = self.skel.rest_forward
-        rt_fwd = quat.mul_vec(rt_rots, forwards) * np.array([1, 0, 1]) # [T, 3]
+        rt_fwd = quat.mul_vec(rt_rots, forwards) * np.array([abs(abs(ax) - 1) for ax in vertical]) # [T, 3]
         # Normalize vectors.
         norm_rt_fwd = rt_fwd / np.linalg.norm(rt_fwd, axis=-1, keepdims=True)
-        if remove_y:
-            norm_rt_fwd = norm_rt_fwd[..., [0,2]]
+        if remove_vertical:
+            settle_ax = []
+            for i, ax in enumerate(vertical):
+                if ax == 0:
+                    settle_ax.append(i)
+            norm_rt_fwd = norm_rt_fwd[..., settle_ax]
         return norm_rt_fwd
     
     # ===================
     #  Future trajectory
     # ===================
-    def future_traj_poss(self, frame: int, remove_y: bool=True, cspace=True) -> np.ndarray:
+    def future_traj_poss(self, frame: int, remove_vertical: bool=True, cspace=True) -> np.ndarray:
         """Calculate future trajectory positions on simulation bone.
         Args:
             frame (int): how many ahead frame to see.
-            remove_y (bool, optional): remove y positions. Defaults to True.
-
+            remove_vertical (bool, optional): remove vertical axis positions. Defaults to True.
+            cspace (bool, optional): use local character space. Defaults to True.
         Returns:
             np.ndarray: future trajectories positions. shape=(len(self), 3) or (len(self), 2)
         """
@@ -348,10 +366,25 @@ class Animation:
         else:
             traj_pos = proj_root_pos[idxs]
 
-        if remove_y: return traj_pos[:, [0,2]]
-        else: return traj_pos
+        if remove_vertical:
+            vertical = self.skel.vertical
+            settle_ax = []
+            for i, ax in enumerate(vertical):
+                if ax == 0:
+                    settle_ax.append(i)
+            return traj_pos[..., settle_ax]
+        else: 
+            return traj_pos
 
-    def future_traj_dirs(self, frame: int, remove_y: bool=True, cspace=True) -> np.ndarray:
+    def future_traj_dirs(self, frame: int, remove_vertical: bool=True, cspace=True) -> np.ndarray:
+        """Calculate future trajectory directions on simulation bone (local character space).
+        Args:
+            frame (int): how many ahead frame to see.
+            remove_vertical (bool, optional): remove vertical axis. Defaults to True.
+            cspace (bool, optional): use local character space. Defaults to True.
+        Returns:
+            np.ndarray: future trajectories directions. shape=(len(self), 3) or (len(self), 2)
+        """
         idxs = self.clamp_future_idxs(frame)
         root_directions = self.root_direction()
         if cspace:
@@ -359,8 +392,15 @@ class Animation:
         else:
             traj_dir = root_directions[idxs]
         
-        if remove_y: return traj_dir[:, [0,2]]
-        else: return traj_dir
+        if remove_vertical:
+            vertical = self.skel.vertical
+            settle_ax = []
+            for i, ax in enumerate(vertical):
+                if ax == 0:
+                    settle_ax.append(i)
+            return traj_dir[..., settle_ax]
+        else: 
+            return traj_dir
     
     def clamp_future_idxs(self, offset: int) -> np.ndarray:
         """Function to calculate the frame array for `offset` frame ahead.
@@ -374,7 +414,56 @@ class Animation:
     # =====================
     #    Other functions
     # =====================
+    def calc_foot_contact(
+        self, 
+        method: str="velocity",
+        threshold: float=0.15,
+        left_foot_name: str="LeftToe",
+        right_foot_name: str="RightToe",
+    ) -> np.ndarray:
+        if method == "velocity":
+            contact_vel = np.linalg.norm(
+                self.gposvel[:, 
+                    [self.joint_names.index(left_foot_name), 
+                    self.joint_names.index(right_foot_name)]
+                ], axis=-1
+            )
+            contacts = contact_vel < threshold
+        elif method == "position":
+            # vertical axis position for each frame.
+            settle_idx = 0
+            inverse = False # Is the negative direction vertical?
+            for i, ax in enumerate(self.skel.vertical):
+                if ax == 1:
+                    settle_idx = i
+                if ax == -1:
+                    settle_idx = i
+                    inverse = True 
+            contact_pos = self.gpos[:,
+                [self.joint_names.index(left_foot_name), 
+                self.joint_names.index(right_foot_name)], settle_idx]
+            if inverse:
+                contact_pos *= -1
+            contacts = contact_pos < threshold
+        else:
+            raise ValueError("unknown value selected on `method`.")
+        for ci in range(contacts.shape[1]):
+            contacts[:, ci] = ndimage.median_filter(
+                contacts[:, ci],
+                size=6,
+                mode="nearest"
+            )
+        return contacts
+    
     def mirror(self, dataset: str=None) -> Animation:
+        vertical = self.skel.vertical
+        forward = self.skel.forward
+        mirror_axis = []
+        for vert_ax, fwd_ax in zip(vertical, forward):
+            if abs(vert_ax) == 1 or abs(fwd_ax) == 1:
+                mirror_axis.append(1)
+            else:
+                mirror_axis.append(-1)
         if dataset == "lafan1":
             quatM, lposM = animation_mirror(
                 lrot=self.quats,
@@ -388,7 +477,8 @@ class Animation:
                 lrot=self.quats,
                 trans=self.trans,
                 names=self.joint_names,
-                parents=self.parents
+                parents=self.parents,
+                mirror_axis=mirror_axis,
             )
         return Animation(
             skel=self.skel,
@@ -416,6 +506,7 @@ def mirror_rot_trans(
     trans: np.ndarray,
     names: list[str],
     parents: np.ndarray | list[int],
+    mirror_axis: list[int]
 ) -> tuple[np.ndarray, np.ndarray]:
     
     joints_mirror: np.ndarray = np.array([(
@@ -423,8 +514,8 @@ def mirror_rot_trans(
         names.index('Right'+n[4:]) if n.startswith('Left') else 
         names.index(n))) for n in names])
 
-    mirror_pos: np.ndarray = np.array([-1, 1, 1])
-    mirror_rot: np.ndarray = np.array([1, 1, -1, -1])
+    mirror_pos: np.ndarray = np.array(mirror_axis)
+    mirror_rot: np.ndarray = np.array([1,] + [-ax for ax in mirror_axis])
     grot: np.ndarray = quat.fk_rot(lrot, parents)
     trans_mirror: np.ndarray = mirror_pos * trans
     grot_mirror: np.ndarray = mirror_rot * grot[:,joints_mirror]

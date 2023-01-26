@@ -105,10 +105,10 @@ if __name__=="__main__":
     
     # 簡単なJointの定義
     joints = []
-    joints.append(Joint(name="ROOT", index=0, parent=-1, offset=np.array([0, 2, 0]), root=True, dof=6))
-    joints.append(Joint(name="J1", index=1, parent= 0, offset=np.array([0, -1, 0.1])))
-    joints.append(Joint(name="J2", index=2, parent= 1, offset=np.array([0, -1, -0.1])))
-    joints.append(Joint(name="J3", index=3, parent= 2, offset=np.array([0, 0, 0.2])))
+    joints.append(Joint(name="ROOT", parent=-1, offset=np.array([0, 2, 0]), root=True, dof=6))
+    joints.append(Joint(name="J1", parent= 0, offset=np.array([0, -1, 0.1])))
+    joints.append(Joint(name="J2", parent= 1, offset=np.array([0, -1, -0.1])))
+    joints.append(Joint(name="J3", parent= 2, offset=np.array([0, 0, 0.2])))
 
     skel = Skel(joints=joints, skel_name="sample_skel")
     anim = Animation.no_animation(skel, num_frame=2, anim_name="sample_anim")

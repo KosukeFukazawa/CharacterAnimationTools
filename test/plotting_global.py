@@ -23,8 +23,8 @@ if __name__ == "__main__":
     poss = anim.gpos / 100
     parents = anim.parents
     
-    proj_root_poss = anim.proj_root_pos(remove_y=True)
-    root_dirs = anim.root_direction(remove_y=True)
+    proj_root_poss = anim.proj_root_pos(remove_vertical=True)
+    root_dirs = anim.root_direction(remove_vertical=True)
     future_20_poss = anim.future_traj_poss(20, cspace=False)
     future_20_dirs = anim.future_traj_dirs(20, cspace=False)
     

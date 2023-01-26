@@ -12,6 +12,11 @@ from util import quat
 from anim.skel import Joint, Skel
 from anim.animation import Animation
 
+def normalize_vector(vector: np.ndarray):
+    norm = np.linalg.norm(vector, axis=-1, keepdims=True)
+    norm = np.where(norm==0, 1e-10, norm)
+    return vector / norm
+
 # まずはEnd effectorのみの実装(Jointの末端が一つのみ)
 def simple_ccd_ik(
     anim: Animation,
@@ -30,12 +35,12 @@ def simple_ccd_ik(
             # 現在のJointを基準としたeffectorの位置(global座標系)
             rel_effpos = anim_.gpos[:,-1] - anim_.gpos[:,parent]
             # rel_effpos = quat.mul_vec(quat.inv(cur_quat), rel_effpos)
-            eff_vec = rel_effpos / (np.linalg.norm(rel_effpos, axis=-1, keepdims=True))
+            eff_vec = normalize_vector(rel_effpos)
             
             # 現在のJointを基準としたtargetの位置(global座標系)
             rel_tgtpos = tgt_pos - anim.gpos[:,parent]
             # rel_tgtpos = quat.mul_vec(quat.inv(cur_quat), rel_tgtpos)
-            tgt_vec = rel_tgtpos / (np.linalg.norm(rel_tgtpos, axis=-1, keepdims=True))
+            tgt_vec = normalize_vector(rel_tgtpos)
             
             rel_quat = quat.normalize(quat.between(eff_vec, tgt_vec))
             anim_.quats[:,parent] = quat.abs(quat.normalize(quat.mul(rel_quat, cur_quat)))
@@ -47,10 +52,10 @@ if __name__=="__main__":
     
     # 簡単なJointの定義
     joints = []
-    joints.append(Joint(name="ROOT", index=0, parent=-1, offset=np.zeros(3), root=True, dof=6))
-    joints.append(Joint(name="J1", index=1, parent= 0, offset=np.array([1, 0, 0])))
-    joints.append(Joint(name="J2", index=2, parent= 1, offset=np.array([1, 0, 0])))
-    joints.append(Joint(name="J3", index=3, parent= 2, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="ROOT", parent=-1, offset=np.zeros(3), root=True, dof=6))
+    joints.append(Joint(name="J1", parent= 0, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="J2", parent= 1, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="J3", parent= 2, offset=np.array([1, 0, 0])))
     #    Root       J1         J2         J3
     #     *----------*----------*----------*
     # (0, 0, 0)  (1, 0, 0)  (2, 0, 0)  (3, 0, 0)

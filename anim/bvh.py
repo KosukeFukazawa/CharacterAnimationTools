@@ -18,6 +18,10 @@ def load(
     start: int=None, 
     end: int=None, 
     order: str=None,
+    rest_forward: list[int] = [0, 0, 1],
+    rest_vertical: list[int] = [0, 1, 0],
+    forward_axis: str = "z",
+    vertical_axis: str = "y",
     load_skel: bool=True,
     load_pose: bool=True,
     skel: Skel=None,
@@ -44,6 +48,10 @@ def load(
         skel, order = load_hierarchy(
             lines = lines[:motion_idx], 
             skel_name=skel_name,
+            rest_forward=rest_forward,
+            rest_vertical=rest_vertical,
+            forward_axis=forward_axis,
+            vertical_axis=vertical_axis
         )
 
     # Load MOTION term.
@@ -51,26 +59,29 @@ def load(
         assert not skel is None, "You need to load `Skel` or define `Skel`." 
         name = filepath.name.split(".")[0]
         
-        fps, trans, quats = load_motion(
+        fps, trans, quats, poss = load_motion(
             lines = lines[motion_idx:],
             start = start,
             end = end,
             order = order,
             skel = skel
         )
-        return Animation(
-            skel=skel,
-            quats=quats,
-            trans=trans,
-            fps=fps,
-            anim_name=name,
-        )
+        anim = Animation(skel, quats, trans, fps=fps, anim_name=name)
+        positions = anim.gpos # [T, J, 3]
+        for joint_idx, pos in poss.items():
+            positions[:, joint_idx] = pos
+        anim.positions = positions
+        return anim
     
     return skel
 
 def load_hierarchy(
     lines: list[str | list[str]],
     skel_name: str,
+    rest_forward: list[int],
+    rest_vertical: list[int],
+    forward_axis: str,
+    vertical_axis: str,
 ) -> Skel:
     
     channelmap: dict[str, str] = {
@@ -82,7 +93,6 @@ def load_hierarchy(
     stacks: list[int] = [-1]
     parents: list[int] = []
     name_list: list[str] = []
-    idx = 0
     joints: list[Joint] = []
     depth:int = 0
     end_site: bool = False
@@ -98,12 +108,10 @@ def load_hierarchy(
                 offset = np.array(list(map(float, line[1:])))
                 joints.append(Joint(
                     name = name_list[-1],
-                    index = idx,
                     parent = parents[-1],
                     offset = offset,
                     root = (parents[-1]==-1),
                     ))
-                idx += 1
         
         elif "CHANNELS" in line:
             dof = int(line[1])
@@ -127,7 +135,7 @@ def load_hierarchy(
     
     assert depth == 0, "Brackets are not closed."
     
-    skel = Skel(joints=joints, skel_name=skel_name)
+    skel = Skel(joints, skel_name, rest_forward, rest_vertical, forward_axis, vertical_axis)
     return skel, order
 
 def load_motion(
@@ -136,7 +144,7 @@ def load_motion(
     skel: Skel,
     start: int=None,
     end: int=None,
-) -> tuple[int, np.ndarray, np.ndarray]:
+) -> tuple[int, np.ndarray, np.ndarray, dict[int: np.ndarray]]:
     
     fps: int = round(1 / float(lines[2][2]))
     lines: list[list[str]] = lines[3:]
@@ -146,56 +154,57 @@ def load_motion(
     ) # T × dim_J matrix
     np_lines = np_lines[start:end]
     
-    dofs = []
     eangles = []
-    poss = []
+    poss = {}
     ckpt = 0
-    for joint in skel.joints:
-        dof = joint.dof
-        dofs.append(dof)
+    joint_idx = 0
+    for dof in skel.dofs:
         if dof == 3:
             eangle = np_lines[:, ckpt:ckpt+3]
             eangles.append(eangle[:, None])
             ckpt += 3
+            joint_idx += 1
         elif dof == 6:
             pos = np_lines[:, ckpt:ckpt+3] # [T, 3]
             eangle = np_lines[:, ckpt+3:ckpt+6]
-            poss.append(pos[:, None]) # [T, 1, 3]
+            poss[joint_idx] = pos
             eangles.append(eangle[:, None])
             ckpt += 6
+            joint_idx += 1
     
-    assert sum(dofs) == np_lines.shape[1], \
+    assert sum(skel.dofs) == np_lines.shape[1], \
         "Skel and Motion are not compatible."
     
-    poss = np.concatenate(poss, axis=1)
     eangles = np.concatenate(eangles, axis=1)
     
-    trans = poss[:, 0]
+    trans = poss[0]
     quats = quat.unroll(quat.from_euler(eangles, order))
     
-    return fps, trans, quats
+    return fps, trans, quats, poss
 
 def save(
     filepath: Path | str,
     anim: Animation, 
     order: str="zyx",
+    save_pos: bool=False,
     ) -> bool:
     
     skel = anim.skel
     trans = anim.trans
     quats = anim.quats
+    positions = anim.positions
     fps = anim.fps
     
     with open(filepath, "w") as f:
         # write hierarchy data.
         f.write("HIERARCHY\n")
-        index_order = save_hierarchy(f, skel, 0, order, 0)
+        index_order = save_hierarchy(f, skel, 0, order, 0, save_pos)
         
         # write motion data.
         f.write("MOTION\n")
         f.write("Frames: %d\n" % len(trans))
         f.write("Frame Time: %f\n" % (1.0 / fps))
-        save_motion(f, trans, quats, order, index_order)
+        save_motion(f, trans, quats, positions, save_pos, order, index_order)
         f.close()
 
 def save_hierarchy(
@@ -204,6 +213,7 @@ def save_hierarchy(
     index: int,
     order: str,
     depth: int,
+    save_pos: bool,
 ) -> list[int]:
 
     def order2xyzrotation(order: str) -> str:
@@ -226,7 +236,7 @@ def save_hierarchy(
     f.write("\t" * depth + \
         "OFFSET %f %f %f\n" % (offset[0], offset[1], offset[2]))
     
-    if joint.root:
+    if joint.root or save_pos:
         f.write("\t" * depth + \
             "CHANNELS 6 Xposition Yposition Zposition %s\n"\
             % order2xyzrotation(order))
@@ -236,7 +246,7 @@ def save_hierarchy(
     
     children_idxs = skel.get_children(index, return_idx=True)
     for child_idx in children_idxs:
-        ch_index_order = save_hierarchy(f, skel, child_idx, order, depth)
+        ch_index_order = save_hierarchy(f, skel, child_idx, order, depth, save_pos)
         index_order.extend(ch_index_order)
     if children_idxs == []:
         f.write("\t" * depth + "End Site\n")
@@ -253,6 +263,8 @@ def save_motion(
     f: TextIOWrapper,
     trans: np.ndarray,
     quats: np.ndarray,
+    positions: np.ndarray,
+    save_pos: bool,
     order: str,
     index_order: list[int],
 ) -> None:
@@ -276,6 +288,10 @@ def save_motion(
                 f.write(
                     "%s" % write_position_rotation(trans[i], eangles[i, j])
                     )
+            elif save_pos:
+                f.write(
+                    "%s" % write_position_rotation(positions[i, j], eangles[i, j])
+                    ) 
             else:
                 f.write(
                     "%s" % write_rotation(eangles[i, j])

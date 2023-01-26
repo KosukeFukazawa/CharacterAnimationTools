@@ -51,14 +51,14 @@ def create_velocity_features(db: Database) -> np.ndarray:
     return features
 
 def create_traj_features(db: Database) -> np.ndarray:
-    traj_pos0 = db.future_traj_poss(20, remove_y=True)
-    traj_pos1 = db.future_traj_poss(40, remove_y=True)
-    traj_pos2 = db.future_traj_poss(60, remove_y=True)
+    traj_pos0 = db.future_traj_poss(20, remove_vertical=True)
+    traj_pos1 = db.future_traj_poss(40, remove_vertical=True)
+    traj_pos2 = db.future_traj_poss(60, remove_vertical=True)
     pos_features = np.concatenate([traj_pos0, traj_pos1, traj_pos2], axis=-1) # [T, 2*3]
     
-    traj_dir0 = db.future_traj_dirs(20, remove_y=True)
-    traj_dir1 = db.future_traj_dirs(40, remove_y=True)
-    traj_dir2 = db.future_traj_dirs(60, remove_y=True)
+    traj_dir0 = db.future_traj_dirs(20, remove_vertical=True)
+    traj_dir1 = db.future_traj_dirs(40, remove_vertical=True)
+    traj_dir2 = db.future_traj_dirs(60, remove_vertical=True)
     dir_features = np.concatenate([traj_dir0, traj_dir1, traj_dir2], axis=-1) # [T, 2*3]
     
     features = np.concatenate([pos_features, dir_features], axis=-1) # [T, 2*3 + 2*3]

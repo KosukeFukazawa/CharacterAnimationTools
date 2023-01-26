@@ -12,6 +12,7 @@ train_model = "all"
 need_preprocess = true
 # processed data dir
 processed_dir = "model/LMM/preprocessed"
+processed_file_name = "dataset.pkl"
 
 # saved files settings
 checkpoint_dir = "model/LMM/checkpoints"

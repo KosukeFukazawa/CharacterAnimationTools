@@ -12,15 +12,20 @@ from util import quat
 from anim.skel import Joint, Skel
 from anim.animation import Animation
 
+def normalize_vector(vector: np.ndarray):
+    norm = np.linalg.norm(vector, axis=-1, keepdims=True)
+    norm = np.where(norm==0, 1e-10, norm)
+    return vector / norm
+
 def backward_reaching(
     anim: Animation,
     tgt_pos: np.ndarray,
 ) -> Animation:
     
-    joint_idxs = np.arange(len(anim.skel))
+    joint_idxs = anim.skel.indices
     target = tgt_pos.copy() # (T, 3)
     cur_gposs = anim.gpos.copy()
-    bone_lengths = np.linalg.norm(anim.offsets, axis=-1)
+    bone_lengths = anim.skel.bone_lengths
     for j, parent in zip(reversed(joint_idxs), reversed(anim.parents)):
         if parent == -1:
             continue
@@ -28,11 +33,11 @@ def backward_reaching(
         
         # 現在のJointを基準とした更新前の子Joint位置(global座標系)
         rel_chpos = cur_gposs[:,j] - cur_gposs[:,parent]
-        ch_vec = rel_chpos / np.linalg.norm(rel_chpos, axis=-1, keepdims=True)
+        ch_vec = normalize_vector(rel_chpos)
         
         # 現在のJointを基準とした更新後の子Joint位置(global座標系)
         rel_tgtpos = target - cur_gposs[:, parent]
-        tgt_vec = rel_tgtpos / np.linalg.norm(rel_tgtpos, axis=-1, keepdims=True)
+        tgt_vec = normalize_vector(rel_tgtpos)
         
         rel_quat = quat.normalize(quat.between(ch_vec, tgt_vec))
         anim.quats[:,parent] = quat.abs(quat.normalize(quat.mul(rel_quat, cur_quat)))
@@ -65,11 +70,11 @@ def forward_reaching(
         
         # 過去の親 -> 過去の子のJoint位置
         past_chpos = past_gposs[:,j] - past_gposs[:,parent]
-        pa_vec = past_chpos / np.linalg.norm(past_chpos, axis=-1, keepdims=True)
+        pa_vec = normalize_vector(past_chpos)
         
         # 現在の親 -> 過去の子のJoint位置
         cur_chpos = past_gposs[:,j] - anim.gpos[:,parent]
-        cur_vec = cur_chpos / np.linalg.norm(cur_chpos, axis=-1, keepdims=True)
+        cur_vec = normalize_vector(cur_chpos)
         
         rel_quat = quat.normalize(quat.between(pa_vec, cur_vec))
         anim.quats[:,parent] = quat.abs(quat.normalize(quat.mul(rel_quat, cur_quat)))
@@ -98,10 +103,10 @@ if __name__=="__main__":
     
     # 簡単なJointの定義
     joints = []
-    joints.append(Joint(name="ROOT", index=0, parent=-1, offset=np.zeros(3), root=True, dof=6))
-    joints.append(Joint(name="J1", index=1, parent= 0, offset=np.array([1, 0, 0])))
-    joints.append(Joint(name="J2", index=2, parent= 1, offset=np.array([1, 0, 0])))
-    joints.append(Joint(name="J3", index=3, parent= 2, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="ROOT", parent=-1, offset=np.zeros(3), root=True, dof=6))
+    joints.append(Joint(name="J1", parent= 0, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="J2", parent= 1, offset=np.array([1, 0, 0])))
+    joints.append(Joint(name="J3", parent= 2, offset=np.array([1, 0, 0])))
     #    Root       J1         J2         J3
     #     *----------*----------*----------*
     # (0, 0, 0)  (1, 0, 0)  (2, 0, 0)  (3, 0, 0)
@@ -156,4 +161,4 @@ if __name__=="__main__":
     ax2.scatter(tgt[0], tgt[1], tgt[2], s=50, marker="*", label="target")
     ax2.legend()
     
-    plt.show()
+    plt.savefig("demo.png")

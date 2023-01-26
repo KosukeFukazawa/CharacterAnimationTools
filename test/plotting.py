@@ -36,8 +36,8 @@ if __name__ == "__main__":
     cposs = db.cpos / 100
     parents = db.parents
     
-    proj_root_poss = db.proj_root_pos(remove_y=True)
-    root_dirs = db.root_direction(remove_y=True)
+    proj_root_poss = db.proj_root_pos(remove_vertical=True)
+    root_dirs = db.root_direction(remove_vertical=True)
     future_20_gposs = db.future_traj_poss(20, cspace=False)
     future_20_gdirs = db.future_traj_dirs(20, cspace=False)
     future_20_cposs = db.future_traj_poss(20, cspace=True)

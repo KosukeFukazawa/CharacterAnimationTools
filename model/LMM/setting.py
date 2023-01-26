@@ -23,10 +23,11 @@ class Config:
         except:
             setting_path = BASEPATH / "configs/DeepLearning/LMM.toml"
             setting = toml_load(setting_path)
-        sys.stdout.write("config file: " + str(setting_path) + "\n")
+        sys.stdout.write(f"Config file: {str(setting_path)}\n")
         
         self.setting = setting
         self.BASEPATH = BASEPATH
+        self.seed = setting.seed
         
         # Device settings (gpu or cpu)
         self.device = setting.device
@@ -48,23 +49,27 @@ class Config:
         # Dataset settings.
         # if you need preprocess
         if setting.need_preprocess:
-            save_dir = BASEPATH / setting.preprocessed_dir
+            save_dir = BASEPATH / setting.processed_dir
             if not save_dir.exists():
                 save_dir.mkdir(parents=True)
-            self.dataset = preprocess_motion_data(BASEPATH, setting.dataset, save_dir)
+                sys.stdout.write(f"Create preprocessed folder at: {str(save_dir)}\n")
+            self.dataset = preprocess_motion_data(BASEPATH, setting.dataset, save_dir / setting.processed_file_name)
         else:
-            self.dataset = pickle_load(save_dir / "dataset.pkl")
+            self.dataset = pickle_load(save_dir / setting.processed_file_name)
         
         # Save experiment settings.
         ckpt_dir = BASEPATH / setting.checkpoint_dir / setting.exp_name
         # TBD: if exists, load checkpoints and resume the experiment.
         if not ckpt_dir.exists():
             ckpt_dir.mkdir(parents=True)
+            sys.stdout.write(f"Create checkpoint folder at: {str(ckpt_dir)}\n")
+        self.ckpt_dir = ckpt_dir
             
         save_cfg_dir = BASEPATH / setting.save_config_dir
-        save_cfg_path = save_cfg_dir / setting.exp_name + ".toml"
+        save_cfg_path = save_cfg_dir / f"{setting.exp_name}.toml"
         if not save_cfg_dir.exists():
             save_cfg_dir.mkdir(parents=True)
+            sys.stdout.write(f"Create config folder at: {str(save_cfg_dir)}\n")
         shutil.copy(str(setting_path), str(save_cfg_path))
 
     def single_gpu_setting(self):

@@ -7,19 +7,37 @@ import numpy as np
 @dataclass
 class Joint:
     name: str
-    index: int
     parent: int
     offset: np.ndarray
     root: bool = False
     dof: int = 3
 
+def axis_to_vector(axis: str):
+    match axis:
+        case "x":
+            return [1, 0, 0]
+        case "y":
+            return [0, 1, 0]
+        case "z":
+            return [0, 0, 1]
+        case "-x":
+            return [-1, 0, 0]
+        case "-y":
+            return [0, -1, 0]
+        case "-z":
+            return [0, 0, -1]
+        case _:
+            raise ValueError
 
 class Skel:
     def __init__(
         self,
         joints: list[Joint],
         skel_name: str="skeleton",
-        rest_forward: list[int]=[0, 1, 0]
+        rest_forward: list[int]=[0, 0, 1],
+        rest_vertical: list[int]=[0, 1, 0],
+        forward_axis: str="z",
+        vertical_axis: str="y",
     ) -> None:
         """Class for skeleton offset definition.
 
@@ -27,10 +45,14 @@ class Skel:
             joints (list[Joint]): list of Joints.
             skel_name (str, optional): name of skeleton. Defaults to "skeleton".
         """
-        
         self.skel_name = skel_name
         self.joints = joints
         self.rest_forward = rest_forward
+        self.rest_vertical = rest_vertical
+        self.forward_axis = forward_axis
+        self.forward = axis_to_vector(forward_axis)
+        self.vertical_axis = vertical_axis
+        self.vertical = axis_to_vector(vertical_axis)
     
     def __len__(self) -> int:
         return len(self.joints)
@@ -39,9 +61,24 @@ class Skel:
         return self.get_joint(index)
     
     @property
+    def indices(self) -> list[int]:
+        return [idx for idx in range(len(self))]
+    
+    @property
     def parents(self) -> list[int]:
         """Get list of all joint's parent indices."""
         return [j.parent for j in self.joints]
+    
+    @property
+    def children(self) -> dict[int: list[int]]:
+        children_dict = {}
+        for i in range(len(self)):
+            children_dict[i] = []
+        for i, parent in enumerate(self.parents):
+            if parent == -1:
+                continue
+            children_dict[parent].append(i)
+        return children_dict
     
     @property
     def names(self) -> list[str]:
@@ -56,6 +93,27 @@ class Skel:
             offsets.append(joint.offset)
         return np.array(offsets)
     
+    @property
+    def dofs(self) -> list[int]:
+        return [j.dof for j in self.joints]
+    
+    @property
+    def joint_depths(self) -> list[int]:
+        """Get hierarchical distance between joints to ROOT."""
+        def get_depth(joint_idx: int, cur_depth: int=0):
+            parent_idx = self.parents[joint_idx]
+            if  parent_idx != -1:
+                depth = cur_depth + 1
+                cur_depth = get_depth(parent_idx, depth)
+            return cur_depth
+        return [get_depth(idx) for idx in self.indices]
+    
+    @property
+    def bone_lengths(self) -> np.ndarray:
+        lengths = np.linalg.norm(self.offsets, axis=-1)
+        lengths[0] = 0
+        return lengths
+    
     def get_joint(self, index: int | slice | str) -> Joint | list[Joint]:
         """Get Joint from index or slice."""
         if isinstance(index, str):
@@ -64,7 +122,7 @@ class Skel:
     
     def get_index_from_jname(self, jname: str) -> int:
         """Get joint name from joint index."""
-        jname_list = self.jnames
+        jname_list = self.names
         return jname_list.index(jname)
     
     def get_children(
@@ -82,13 +140,14 @@ class Skel:
         if isinstance(index, str):
             index: int = self.get_index_from_jname(index)
         
-        children: list[Joint] = []
-        children_idx: list[int] = []
-        for i, parent in enumerate(self.parents):
-            if index == parent:
-                children.append(self.joints[i])
-                children_idx.append(i)
-        return children_idx if return_idx else children
+        children_idx = self.children[index]
+        if return_idx:
+            return children_idx
+        else:
+            children = []
+            for child_idx in children_idx:
+                children.append(self.joints[child_idx])
+            return children
     
     def get_parent(
         self, 
@@ -118,7 +177,11 @@ class Skel:
         names: list[str],
         parents: list[int],
         offsets: np.ndarray,
-        skel_name: str="skeleton"
+        skel_name: str="skeleton",
+        rest_forward: list[int]=[0, 0, 1],
+        rest_vertical: list[int] = [0, 1, 0],
+        forward_axis: str = "z",
+        vertical_axis: str = "y"
     ) -> Skel:
         """Construct new Skel from names, parents, offsets.
         
@@ -129,12 +192,10 @@ class Skel:
         return:
             Skel
         """
-        
         joints = []
-        indices = np.arange(len(names))
-        for name, idx, parent, offset in zip(names, indices, parents, offsets):
+        for name, parent, offset in zip(names, parents, offsets):
             dof = 6 if parent == -1 else 3
             joints.append(
-                Joint(name, idx, parent, offset, (parent==-1), dof)
+                Joint(name, parent, offset, (parent==-1), dof)
             )
-        return Skel(joints, skel_name)
+        return Skel(joints, skel_name, rest_forward, rest_vertical, forward_axis, vertical_axis)
