@@ -4,7 +4,8 @@ import numpy as np
 from util import quat
 
 def eye(shape: list[int], dtype=np.float32) -> np.ndarray:
-    return np.ones(list(shape) + [8], dtype=dtype) * np.asarray([1, 0, 0, 0, 0, 0, 0, 0], dtype=dtype)
+    return np.ones(list(shape) + [8], dtype=dtype) * \
+        np.asarray([1, 0, 0, 0, 0, 0, 0, 0], dtype=dtype)
 
 def normalize(dq: np.ndarray, eps=1e-8) -> np.ndarray:
     mag = quat.length(dq[...,:4])
@@ -18,7 +19,7 @@ def abs(dq: np.ndarray) -> np.ndarray:
 
 def inv(dq: np.ndarray) -> np.ndarray:
     real = quat.inv(dq[...,:4])
-    dual = -quat.mul(quat.mul(quat.inv(dq[...,:4]), dq[...,4:]), quat.inv(dq[...,:4]))
+    dual = -quat.mul_inv(quat.inv_mul(dq[...,:4], dq[...,4:]), dq[...,:4])
     return np.concatenate([real, dual], axis=-1)
 
 def mul(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -32,7 +33,7 @@ def from_trans(trans: np.ndarray) -> np.ndarray:
     return np.concatenate([quat.eye(trans.shape[:,-1]), dual], axis=-1)
 
 def from_rot(rot: np.ndarray) -> np.ndarray:
-    return np.concatenate([rot, np.zeros(rot.shape[:-1] + (4,))])
+    return np.concatenate([rot, np.zeros(rot.shape[:-1] + (4,))], axis=-1)
 
 def from_rot_and_trans(rot: np.ndarray, trans: np.ndarray) -> np.ndarray:
     rot = quat.normalize(rot)

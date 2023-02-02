@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.ndimage as ndimage
 from util import quat
+from util import dualquat as dq
 from anim.skel import Skel
 
 
@@ -299,6 +300,17 @@ class Animation:
             gtrans.append(np.matmul(gtrans[parents[i]],ltrans[...,i:i+1,:,:]))
         
         return np.concatenate(gtrans, axis=-3)
+    
+    # ==================
+    #  dual quaternions
+    # ==================
+    @property
+    def local_dualquat(self) -> np.ndarray:
+        return dq.from_rot_and_trans(self.quats, self.lpos)
+    
+    @property
+    def global_dualquat(self) -> np.ndarray:
+        return dq.fk(self.local_dualquat, self.parents)
     
     # =============
     #  trajectory 
