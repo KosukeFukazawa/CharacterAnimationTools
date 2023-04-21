@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
-
 @dataclass
 class Joint:
     name: str
@@ -44,6 +43,10 @@ class Skel:
         Args:
             joints (list[Joint]): list of Joints.
             skel_name (str, optional): name of skeleton. Defaults to "skeleton".
+            rest_forward  (list[int], optional): forward direction of the rest pose. Defaults to [0, 0, 1].
+            rest_vertical (list[int], optional): vertical direction of the rest pose. Defaults to [0, 1, 0].
+            forward_axis (str, optional): forward axis of the coodinates. Defaults to "z".
+            vertical_axis (str, optional): vertical axis of the coodinates. Defaults to "y".
         """
         self.skel_name = skel_name
         self.joints = joints
@@ -87,7 +90,7 @@ class Skel:
     
     @property
     def offsets(self) -> np.ndarray:
-        """Get offsets concatenated by all joint offset"""
+        """Offset coordinates of all joints (np.ndarray)."""
         offsets: list[np.ndarray] = []
         for joint in self.joints:
             offsets.append(joint.offset)
@@ -115,13 +118,13 @@ class Skel:
         return lengths
     
     def get_joint(self, index: int | slice | str) -> Joint | list[Joint]:
-        """Get Joint from index or slice."""
+        """Get Joint from index or slice or joint name."""
         if isinstance(index, str):
             index: int = self.get_index_from_jname(index)
         return self.joints[index]
     
     def get_index_from_jname(self, jname: str) -> int:
-        """Get joint name from joint index."""
+        """Get joint index from joint name."""
         jname_list = self.names
         return jname_list.index(jname)
     
@@ -156,10 +159,12 @@ class Skel:
     ) -> Joint | int | None:
         """Get parent joint or parent index.
         args:
-            index: index of joint or name of joint.
-            return_idx: if True, return joint index.
+            index (int | str): index of joint or name of joint.
+            return_idx (bool): if True, return joint index.
         return:
-            Joint or index (if return_idx).
+            None : if parent doesn't exists.
+            index (int): if return_idx = True.
+            joint (Joint): if return_idx = False.
         """
         if isinstance(index, str):
             _index: int = self.get_index_from_jname(index)
@@ -186,16 +191,21 @@ class Skel:
         """Construct new Skel from names, parents, offsets.
         
         args:
-            names : list of joints names.
-            parents: list of joints parents.
-            offsets: numpy array of offsets.
+            names(list[str]) : list of joints names.
+            parents(list[int]) : list of joints parents indices.
+            offsets(np.ndarray): joint offset relative coordinates from parent joints.
+            skel_name (str, optional): name of skeleton. Defaults to "skeleton".
+            rest_forward  (list[int], optional): forward direction of the rest pose. Defaults to [0, 0, 1].
+            rest_vertical (list[int], optional): vertical direction of the rest pose. Defaults to [0, 1, 0].
+            forward_axis (str, optional): forward axis of the coodinates. Defaults to "z".
+            vertical_axis (str, optional): vertical axis of the coodinates. Defaults to "y".
         return:
             Skel
         """
+        ln, lp, lo = len(names), len(parents), len(offsets)
+        assert len(set(ln, lp, lo)) == 1
         joints = []
         for name, parent, offset in zip(names, parents, offsets):
             dof = 6 if parent == -1 else 3
-            joints.append(
-                Joint(name, parent, offset, (parent==-1), dof)
-            )
+            joints.append(Joint(name, parent, offset, (parent==-1), dof))
         return Skel(joints, skel_name, rest_forward, rest_vertical, forward_axis, vertical_axis)
