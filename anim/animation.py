@@ -510,7 +510,7 @@ class Animation:
         """Create a unit animation (no rotation, no transition) from Skel"""
         quats = quat.eye([num_frame, len(skel)])
         trans = np.zeros([num_frame, 3])
-        return Animation(skel, quats, trans, fps, anim_name)
+        return Animation(skel, quats, trans, None, fps, anim_name)
 
 
 def mirror_rot_trans(
