@@ -19,9 +19,9 @@ def yaml_load(path: Path):
     cfg = EasyDict(cfg)
     return cfg
 
-def pickle_load(path: Path):
+def pickle_load(path: Path, encoding: str="ASCII"):
     with open(path, "rb") as f:
-        cfg = pickle.load(f)
+        cfg = pickle.load(f, encoding=encoding)
     return cfg
 
 def json_load(path: Path):

@@ -1,6 +1,15 @@
+"""
+smpl.py
+
+JOINT_NAMES, SMPLH_JOINT_NAMES, SMPL_JOINT_NAMES are from \
+https://github.com/vchoutas/smplx/blob/main/smplx/joint_names.py
+"""
+
 from __future__ import annotations
 
+from pathlib import Path
 import numpy as np
+from util.load import pickle_load
 
 JOINT_NAMES = [
     "pelvis",
@@ -254,6 +263,22 @@ SMPL_JOINT_NAMES = [
     "right_hand",
 ]
 
+def load_model(model_path: Path, gender: str=None):
+    if isinstance(model_path, str):
+        model_path = Path(model_path)
+    if model_path.suffix == "":
+        model_path = model_path / gender / "model.npz"
+    match model_path.suffix:
+        case ".npz":
+            model_dict = np.load(model_path, allow_pickle=True)
+        case ".pkl":
+            try:
+                model_dict = pickle_load(model_path)
+            except:
+                model_dict = pickle_load(model_path, encoding="latin1")
+        case _ :  
+            ValueError("This file is not supported.")
+    return model_dict
 
 def calc_skel_offsets(
         betas: np.ndarray,

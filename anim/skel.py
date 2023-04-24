@@ -203,7 +203,7 @@ class Skel:
             Skel
         """
         ln, lp, lo = len(names), len(parents), len(offsets)
-        assert len(set(ln, lp, lo)) == 1
+        assert len(set([ln, lp, lo])) == 1
         joints = []
         for name, parent, offset in zip(names, parents, offsets):
             dof = 6 if parent == -1 else 3

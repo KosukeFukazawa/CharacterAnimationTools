@@ -1,51 +1,65 @@
 """
 aistpp.py
+AIST++ : 
+    format: ***.pkl (pickle file)
+    Parameters :
+        "smpl_loss" (float): I don't know how to use it.
+        "smpl_poses" (np.ndarray): SMPL pose paramters (rotations). shape: (num_frame, num_J * 3 = 72).
+        "smpl_scaling" (float): Scaling parameters of the skeleton.
+        "smpl_trans" (np.ndarray): Root translations. shape: (num_frame, 3).
 """
-# loading and writing aist++ data.
+# loading AIST++ data.
 
 from __future__ import annotations
 
 from pathlib import Path
 import numpy as np
-
 from anim.skel import Skel
 from anim.animation import Animation
+from anim.smpl import load_model, calc_skel_offsets, SMPL_JOINT_NAMES
 from util import quat
 from util.load import pickle_load
 
 def load(
-    pklpath: Path,
+    aistpp_motion_path: Path,
     skel: Skel=None,
-    skel_cfg: Path=Path("configs/skel_smpl_neutral.npz"),
-    load_skel: bool=True,
-    fps: int = 30,
+    smpl_path: Path=Path("data/smpl/neutral/model.pkl"),
+    scale: float=100.0,
+    fps: int=30,
 ) -> Animation:
     
-    if load_skel:
-        # Load a Skel.
-        skel_info = np.load(skel_cfg, allow_pickle=True)
-        skel = Skel.from_names_parents_offsets(
-            names = skel_info["names"].tolist(),
-            parents=skel_info["parents"].tolist(),
-            offsets=skel_info["offsets"],
-            skel_name="SMPL_"+str(skel_info["gender"])
-        )
-    assert not skel is None, "you shoud define the Skel."
+    NUM_JOINTS = 24
+    NUM_BETAS = 10
     
     # Load a motion.
-    if isinstance(pklpath, str):
-        pklpath = Path(pklpath)
-    
-    name = pklpath.name.split(".")[0]
-    motion_info = pickle_load(pklpath)
-    poses = motion_info["smpl_poses"] # [fnum, 72]
-    poses = poses.reshape(len(poses), -1, 3) # [fnum, 24, 3]
+    if isinstance(aistpp_motion_path, str):
+        aistpp_motion_path = Path(aistpp_motion_path)
+    name = aistpp_motion_path.stem
+    aistpp_dict = pickle_load(aistpp_motion_path)
+    poses = aistpp_dict["smpl_poses"]
+    num_frames = len(poses)
+    poses = poses.reshape(num_frames, -1, 3)
     quats = quat.from_axis_angle(poses)
-    scaling = motion_info["smpl_scaling"]
-    trans = motion_info["smpl_trans"] # [fnum, 3]
-    trans /= scaling
+    scale /= aistpp_dict["smpl_scaling"]
+    trans = aistpp_dict["smpl_trans"] / aistpp_dict["smpl_scaling"]
 
-    # We need to add smpl root offsets to translations.
-    trans += skel_info["offsets"][0]
+    if skel == None:
+        # Load a Skel.
+        smpl_dict = load_model(smpl_path)
+        parents = list(map(int, smpl_dict["kintree_table"][0][:NUM_JOINTS]))
+        parents[0] = -1
+        J_regressor = smpl_dict["J_regressor"]
+        shapedirs = smpl_dict["shapedirs"]
+        v_template = smpl_dict["v_template"]
+        betas = np.zeros([NUM_BETAS])
+        J_positions = calc_skel_offsets(betas, J_regressor, shapedirs, v_template)[:NUM_JOINTS] * scale
+        root_offset = J_positions[0]
+        offsets = J_positions - J_positions[parents]
+        offsets[0] = root_offset
+        names = SMPL_JOINT_NAMES[:NUM_JOINTS]
+        skel = Skel.from_names_parents_offsets(names, parents, offsets)
+
+    # We need to apply smpl root offsets to translations.
+    trans += root_offset
     
     return Animation(skel=skel, quats=quats, trans=trans, fps=fps, anim_name=name,)
