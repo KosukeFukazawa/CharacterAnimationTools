@@ -521,10 +521,11 @@ def mirror_rot_trans(
     mirror_axis: list[int]
 ) -> tuple[np.ndarray, np.ndarray]:
     
+    lower_names = [n.lower() for n in names]
     joints_mirror: np.ndarray = np.array([(
-        names.index('Left'+n[5:]) if n.startswith('Right') else (
-        names.index('Right'+n[4:]) if n.startswith('Left') else 
-        names.index(n))) for n in names])
+        lower_names.index("left"+n[5:]) if n.startswith("right") else
+        lower_names.index("right"+n[4:]) if n.startswith("left") else 
+        lower_names.index(n)) for n in lower_names])
 
     mirror_pos: np.ndarray = np.array(mirror_axis)
     mirror_rot: np.ndarray = np.array([1,] + [-ax for ax in mirror_axis])
