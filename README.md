@@ -15,13 +15,14 @@ It is useful for pre-processing and post-processing motions in **Deep Learning**
 It will be also useful for create character animations.
 
 ## :star: Requirements
-I tested on python3.10. 
+I tested on python3.10 (for match-case syntax).
 
 ### Package
 * NumPy
 * SciPy
 * matplotlib
-* smplx (for SMPL model)
+* chumpy (if you use vanilla SMPL for AIST++).
+* easydict
 <!-- 
 TBD
 * PyTorch
@@ -35,6 +36,8 @@ Some of the scripts in this repository need motion data below.
 Please download them and place them in [`data/`](data) or link them as symbolic links at [`data/`](data). For more information please see [`data/data.md`](data/data.md).
 * [Ubisoft La Forge Animation Dataset (LAFAN1)](https://github.com/ubisoft/ubisoft-laforge-animation-dataset)
 * [SMPL](https://smpl.is.tue.mpg.de/)
+* [SMPL+H](https://mano.is.tue.mpg.de/)
+* [SMPL-X](https://smpl-x.is.tue.mpg.de/)
 * [AMASS](https://amass.is.tue.mpg.de/)
 * [AIST++](https://google.github.io/aistplusplus_dataset/factsfigures.html)
 
@@ -53,18 +56,27 @@ anim_bvh: Animation = bvh.load(filepath="data/**.bvh")
 ```
 
 #### 1.2 Load Animation from [AIST++](https://google.github.io/aistplusplus_dataset/factsfigures.html).
+You need to install chumpy to use vanilla SMPL model.
 ```Python
 from anim import aistpp
-anim_aistpp: Animation = aistpp.load(
-    pklpath="data/**.pkl",
-    skel_cfg="configs/skel_smpl_neutral.npz"
+anim: Animation = aistpp.load(
+    aistpp_motion_path="data/aistpp/**.pkl",
+    smpl_path="data/smpl/neutral/model.pkl"
 )
 ``` 
 
 #### 1.3 Load Animation from [AMASS](https://amass.is.tue.mpg.de/).
-TBD
+I recommend you to download extended SMPL+H model (16 beta components).
+```Python
+from anim import amass
+anim: Animation = amass.load(
+    amass_motion_path="data/amass/**.npz",
+    smplh_path="data/smplh/neutral/model.npz"
+)
+```
 
 #### 1.4 Save as bvh.
+You can convert SMPL based motion files (AIST++, AMASS) to BVH files.
 ```Python
 from anim import bvh
 from anim.animation import Animation
