@@ -40,7 +40,6 @@ def load(
     num_frames = len(poses)
     poses = poses.reshape(num_frames, -1, 3)
     quats = quat.from_axis_angle(poses)
-    scale /= aistpp_dict["smpl_scaling"]
     trans = aistpp_dict["smpl_trans"] / aistpp_dict["smpl_scaling"]
 
     if skel == None:
